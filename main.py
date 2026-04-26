@@ -67,13 +67,37 @@ def read_file_tool(filename: str) -> Dict[str, Any]:
     :return: The full content of the file.
     """
     full_path = to_abs_path(filename)
-    print(full_path)
     with open(str(full_path), "r") as f:
         content = f.read()
     return {"file_path": str(full_path), "content": content}
 
 
-TOOLS = {"list_files": list_files_tool, "read_file": read_file_tool}
+def edit_file_tool(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
+    """
+    Replaces first occurrence of old_str with new_str in file. If old_str is empty,
+    create/overwrite file with new_str.
+    :param path: The path to the file to edit.
+    :param old_str: The string to replace.
+    :param new_str: The string to replace with.
+    :return: A dictionary with the path to the file and the action taken.
+    """
+    full_path = to_abs_path(path)
+    if old_str == "":
+        full_path.write_text(new_str, encoding="utf-8")
+        return {"path": str(full_path), "action": "created_file"}
+    original = full_path.read_text(encoding="utf-8")
+    if original.find(old_str) == -1:
+        return {"path": str(full_path), "action": "old_str not found"}
+    edited = original.replace(old_str, new_str, 1)
+    full_path.write_text(edited, encoding="utf-8")
+    return {"path": str(full_path), "action": "edited"}
+
+
+TOOLS = {
+    "list_files": list_files_tool,
+    "read_file": read_file_tool,
+    "edit_file": edit_file_tool,
+}
 
 
 def get_tool_str_representation(tool_name):
