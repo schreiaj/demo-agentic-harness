@@ -47,7 +47,7 @@ def to_abs_path(path_str):
 
 def list_files_tool(path: str) -> Dict[str, Any]:
     """
-    Lists the files in a directory provided by the user.
+    Lists the files in a directory
     :param path: The path to a directory to list files from.
     :return: A list of files in the directory.
     """
@@ -60,7 +60,20 @@ def list_files_tool(path: str) -> Dict[str, Any]:
     return {"path": str(full_path), "files": all_files}
 
 
-TOOLS = {"list_files": list_files_tool}
+def read_file_tool(filename: str) -> Dict[str, Any]:
+    """
+    Gets the full content of a file
+    :param filename: The name of the file to read.
+    :return: The full content of the file.
+    """
+    full_path = to_abs_path(filename)
+    print(full_path)
+    with open(str(full_path), "r") as f:
+        content = f.read()
+    return {"file_path": str(full_path), "content": content}
+
+
+TOOLS = {"list_files": list_files_tool, "read_file": read_file_tool}
 
 
 def get_tool_str_representation(tool_name):
@@ -122,26 +135,38 @@ def main():
         except (KeyboardInterrupt, EOFError):
             break
         conversation.append({"role": "user", "content": user_input.strip()})
-        response = openrouter_api.chat.send(messages=conversation, model=model)
-        conversation.append(
-            {"role": "assistant", "content": response.choices[0].message.content}
-        )
-        # Let's extract tool calls
-        tool_calls = extract_tool_calls(response.choices[0].message.content)
-        # In the case of tool calls, let's show we wanted to do them
-        if tool_calls:
-            for name, args in tool_calls:
-                print(f"[purple]Tool Use Requested: {name} with args {args}[/purple]")
-                # Now we call the tool
-                resp = TOOLS[name](**args)
-                print(wrap_llm(f"tool_result({json.dumps(resp)})"))
+        # Now, the problem is, if the llm wants to call multiple tools... what do we do?
+        # Simple, we loop until the llm doesn't want to call more tools
+        while True:
+            response = openrouter_api.chat.send(messages=conversation, model=model)
+            # Let's extract tool calls
+            tool_calls = extract_tool_calls(response.choices[0].message.content)
+            # In the case of tool calls, let's show we wanted to do them
+            if tool_calls:
+                for name, args in tool_calls:
+                    print(
+                        f"[purple]Tool Use Requested: {name} with args {args}[/purple]"
+                    )
+                    # Now we call the tool
+                    resp = TOOLS[name](**args)
+                    print(wrap_llm(f"tool_result({json.dumps(resp)})"))
+                    conversation.append(
+                        {
+                            "role": "assistant",
+                            "content": f"tool_result({json.dumps(resp)})",
+                        }
+                    )
+
+            # Otherwise, let's print response
+            else:
+                print(wrap_llm(response.choices[0].message.content))
                 conversation.append(
-                    {"role": "assistant", "content": f"tool_result({json.dumps(resp)})"}
+                    {
+                        "role": "assistant",
+                        "content": response.choices[0].message.content,
+                    }
                 )
-        # Otherwise, let's print response
-        else:
-            print(wrap_llm(response.choices[0].message.content))
-        # TODO: Tool Calls
+                break
 
 
 if __name__ == "__main__":
