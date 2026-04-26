@@ -20,6 +20,15 @@ openrouter_api = OpenRouter(
 model = os.getenv("OPENROUTER_MODEL")
 
 
+SYSTEM_PROMPT = """
+You are a coding assistant whose goal it is to help us solve coding tasks.
+"""
+
+
+def get_system_prompt():
+    return SYSTEM_PROMPT
+
+
 # Just a helper to make paths easier
 def to_abs_path(path_str):
     """
@@ -35,18 +44,22 @@ def wrap_input(str):
     return f"[grey][bold]User:[/bold]{str}[/grey]"
 
 
+def wrap_llm(str):
+    return f"[blue][bold]LLM: [/bold]{str}[/blue]"
+
+
 def main():
     # We're going to hold our conversation here
-    conversation = [{"role": "system", "content": ""}]
+    conversation = [{"role": "system", "content": get_system_prompt()}]
     print(f"[bold red]Model:[/bold red] [underline]{model}[/underline]")
     while True:
         try:
-            user_input = input("> ")
+            user_input = input("User: ")
         except (KeyboardInterrupt, EOFError):
             break
         conversation.append({"role": "user", "content": user_input.strip()})
-        print(wrap_input(user_input.strip()))
-        # TODO: Send request to LLM
+        response = openrouter_api.chat.send(messages=conversation, model=model)
+        print(wrap_llm(response.choices[0].message.content))
         # TODO: Tool Calls
 
 
