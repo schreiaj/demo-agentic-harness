@@ -101,6 +101,10 @@ def wrap_llm(str):
     return f"[blue][bold]LLM: [/bold]{str}[/blue]"
 
 
+def wrap_error(str):
+    return f"[red bold]{str}[/red bold]"
+
+
 def extract_tool_calls(text):
     """
     Return list of (tool_name, args) requested in 'tool: name({...})' lines.
@@ -148,14 +152,24 @@ def main():
                         f"[purple]Tool Use Requested: {name} with args {args}[/purple]"
                     )
                     # Now we call the tool
-                    resp = TOOLS[name](**args)
-                    print(wrap_llm(f"tool_result({json.dumps(resp)})"))
-                    conversation.append(
-                        {
-                            "role": "assistant",
-                            "content": f"tool_result({json.dumps(resp)})",
-                        }
-                    )
+                    try:
+                        resp = TOOLS[name](**args)
+                        print(wrap_llm(f"tool_result({json.dumps(resp)})"))
+                        conversation.append(
+                            {
+                                "role": "assistant",
+                                "content": f"tool_result({json.dumps(resp)})",
+                            }
+                        )
+                    # Let's at least tell the LLM an error occured
+                    except Exception as e:
+                        print(wrap_error(e))
+                        conversation.append(
+                            {
+                                "role": "assistant",
+                                "content": f"tool_error({json.dumps(e)})",
+                            }
+                        )
 
             # Otherwise, let's print response
             else:
