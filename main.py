@@ -88,6 +88,30 @@ def wrap_llm(str):
     return f"[blue][bold]LLM: [/bold]{str}[/blue]"
 
 
+def extract_tool_calls(text):
+    """
+    Return list of (tool_name, args) requested in 'tool: name({...})' lines.
+    The parser expects single-line, compact JSON in parentheses.
+    """
+    invocations = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("tool:"):
+            continue
+        try:
+            after = line[len("tool:") :].strip()
+            name, rest = after.split("(", 1)
+            name = name.strip()
+            if not rest.endswith(")"):
+                continue
+            json_str = rest[:-1].strip()
+            args = json.loads(json_str)
+            invocations.append((name, args))
+        except Exception:
+            continue
+    return invocations
+
+
 def main():
     # We're going to hold our conversation here
     conversation = [{"role": "system", "content": get_system_prompt()}]
@@ -99,7 +123,18 @@ def main():
             break
         conversation.append({"role": "user", "content": user_input.strip()})
         response = openrouter_api.chat.send(messages=conversation, model=model)
-        print(wrap_llm(response.choices[0].message.content))
+        conversation.append(
+            {"role": "assistant", "content": response.choices[0].message.content}
+        )
+        # Let's extract tool calls
+        tool_calls = extract_tool_calls(response.choices[0].message.content)
+        # In the case of tool calls, let's show we wanted to do them
+        if tool_calls:
+            for call in tool_calls:
+                print(f"[purple]Tool Use Requested: {call}[/purple]")
+        # Otherwise, let's print response
+        else:
+            print(wrap_llm(response.choices[0].message.content))
         # TODO: Tool Calls
 
 
