@@ -130,8 +130,14 @@ def main():
         tool_calls = extract_tool_calls(response.choices[0].message.content)
         # In the case of tool calls, let's show we wanted to do them
         if tool_calls:
-            for call in tool_calls:
-                print(f"[purple]Tool Use Requested: {call}[/purple]")
+            for name, args in tool_calls:
+                print(f"[purple]Tool Use Requested: {name} with args {args}[/purple]")
+                # Now we call the tool
+                resp = TOOLS[name](**args)
+                print(wrap_llm(f"tool_result({json.dumps(resp)})"))
+                conversation.append(
+                    {"role": "assistant", "content": f"tool_result({json.dumps(resp)})"}
+                )
         # Otherwise, let's print response
         else:
             print(wrap_llm(response.choices[0].message.content))
