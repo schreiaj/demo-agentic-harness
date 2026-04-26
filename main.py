@@ -20,13 +20,18 @@ openrouter_api = OpenRouter(
 model = os.getenv("OPENROUTER_MODEL")
 
 
+# TODO: Tell the assistant about the tools it has
 SYSTEM_PROMPT = """
 You are a coding assistant whose goal it is to help us solve coding tasks.
+You have access to a series of tools you can execute. Here are the tools you can execute:
+
+    {tool_list}
+
+When you want to use a tool, reply with exactly one line in the format: 'tool: TOOL_NAME({{JSON_ARGS}})' and nothing else.
+Use compact single-line JSON with double quotes. After receiving a tool_result(...) message, continue the task.
+If no tool is needed, respond normally.
+
 """
-
-
-def get_system_prompt():
-    return SYSTEM_PROMPT
 
 
 # Just a helper to make paths easier
@@ -38,6 +43,41 @@ def to_abs_path(path_str):
     if not path.is_absolute():
         path = (Path.cwd() / path).resolve()
     return path
+
+
+def list_files_tool(path: str) -> Dict[str, Any]:
+    """
+    Lists the files in a directory provided by the user.
+    :param path: The path to a directory to list files from.
+    :return: A list of files in the directory.
+    """
+    full_path = to_abs_path(path)
+    all_files = []
+    for item in full_path.iterdir():
+        all_files.append(
+            {"filename": item.name, "type": "file" if item.is_file() else "dir"}
+        )
+    return {"path": str(full_path), "files": all_files}
+
+
+TOOLS = {"list_files": list_files_tool}
+
+
+def get_tool_str_representation(tool_name):
+    tool = TOOLS[tool_name]
+    return f"""
+    Name: {tool_name}
+    Description: {tool.__doc__}
+    Signature: {inspect.signature(tool)}
+    """
+
+
+def get_system_prompt():
+    tool_str_repr = ""
+    for tool_name in TOOLS:
+        tool_str_repr += "TOOL\n===" + get_tool_str_representation(tool_name)
+        tool_str_repr += f"\n{'=' * 15}\n"
+    return SYSTEM_PROMPT.format(tool_list=tool_str_repr)
 
 
 def wrap_input(str):
