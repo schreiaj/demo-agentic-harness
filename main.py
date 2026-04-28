@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from dotenv import load_dotenv
+from function_schema import get_function_schema
 from openrouter import OpenRouter
 
 # This is just for coloring the terminal
@@ -15,6 +16,7 @@ load_dotenv()
 # This just sets up the LLM API we're going to use
 openrouter_api = OpenRouter(
     api_key=os.getenv("OPENROUTER_API_KEY", ""),
+    server_url=os.getenv("OPENROUTER_BASE_URL", None),
 )
 
 model = os.getenv("OPENROUTER_MODEL")
@@ -23,14 +25,6 @@ model = os.getenv("OPENROUTER_MODEL")
 # TODO: Tell the assistant about the tools it has
 SYSTEM_PROMPT = """
 You are a coding assistant whose goal it is to help us solve coding tasks.
-You have access to a series of tools you can execute. Here are the tools you can execute:
-
-    {tool_list}
-
-When you want to use a tool, reply with exactly one line in the format: 'tool: TOOL_NAME({{JSON_ARGS}})' and nothing else.
-Use compact single-line JSON with double quotes. After receiving a tool_result(...) message, continue the task.
-If no tool is needed, respond normally.
-
 """
 
 
@@ -93,28 +87,23 @@ def edit_file_tool(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
     return {"path": str(full_path), "action": "edited"}
 
 
-TOOLS = {
-    "list_files": list_files_tool,
-    "read_file": read_file_tool,
-    "edit_file": edit_file_tool,
-}
+TOOLS = [list_files_tool, read_file_tool, edit_file_tool]
+
+# We need this to map from name to declared tools
+TOOLS_DICT = dict(zip([t.__name__ for t in TOOLS], TOOLS))
 
 
-def get_tool_str_representation(tool_name):
-    tool = TOOLS[tool_name]
-    return f"""
-    Name: {tool_name}
-    Description: {tool.__doc__}
-    Signature: {inspect.signature(tool)}
-    """
+def get_tool_str_representation(tool):
+    schema = get_function_schema(tool)
+    return {"type": "function", "function": schema}
 
 
 def get_system_prompt():
-    tool_str_repr = ""
-    for tool_name in TOOLS:
-        tool_str_repr += "TOOL\n===" + get_tool_str_representation(tool_name)
-        tool_str_repr += f"\n{'=' * 15}\n"
-    return SYSTEM_PROMPT.format(tool_list=tool_str_repr)
+    return SYSTEM_PROMPT
+
+
+def get_tools():
+    return [get_tool_str_representation(t) for t in TOOLS]
 
 
 def wrap_input(str):
@@ -127,30 +116,6 @@ def wrap_llm(str):
 
 def wrap_error(str):
     return f"[red bold]{str}[/red bold]"
-
-
-def extract_tool_calls(text):
-    """
-    Return list of (tool_name, args) requested in 'tool: name({...})' lines.
-    The parser expects single-line, compact JSON in parentheses.
-    """
-    invocations = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line.startswith("tool:"):
-            continue
-        try:
-            after = line[len("tool:") :].strip()
-            name, rest = after.split("(", 1)
-            name = name.strip()
-            if not rest.endswith(")"):
-                continue
-            json_str = rest[:-1].strip()
-            args = json.loads(json_str)
-            invocations.append((name, args))
-        except Exception:
-            continue
-    return invocations
 
 
 def main():
@@ -166,18 +131,22 @@ def main():
         # Now, the problem is, if the llm wants to call multiple tools... what do we do?
         # Simple, we loop until the llm doesn't want to call more tools
         while True:
-            response = openrouter_api.chat.send(messages=conversation, model=model)
+            response = openrouter_api.chat.send(
+                messages=conversation, model=model, tools=get_tools()
+            )
             # Let's extract tool calls
-            tool_calls = extract_tool_calls(response.choices[0].message.content)
+            tool_calls = response.choices[0].message.tool_calls
             # In the case of tool calls, let's show we wanted to do them
             if tool_calls:
-                for name, args in tool_calls:
+                for call in tool_calls:
+                    function = call.function
                     print(
-                        f"[purple]Tool Use Requested: {name} with args {args}[/purple]"
+                        f"[purple]Tool Use Requested: {function.name} with args {function.arguments}[/purple]"
                     )
                     # Now we call the tool
                     try:
-                        resp = TOOLS[name](**args)
+                        args = json.loads(function.arguments)
+                        resp = TOOLS_DICT[function.name](**args)
                         print(wrap_llm(f"tool_result({json.dumps(resp)})"))
                         conversation.append(
                             {
