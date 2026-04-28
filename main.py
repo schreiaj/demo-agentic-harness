@@ -27,6 +27,8 @@ SYSTEM_PROMPT = """
 You are a coding assistant whose goal it is to help us solve coding tasks.
 """
 
+# BEGIN - TOOL Defs
+
 
 # Just a helper to make paths easier
 def to_abs_path(path_str):
@@ -91,8 +93,10 @@ TOOLS = [list_files_tool, read_file_tool, edit_file_tool]
 
 # We need this to map from name to declared tools
 TOOLS_DICT = dict(zip([t.__name__ for t in TOOLS], TOOLS))
+# END - TOOL DEFS
 
 
+# BEGIN - HELPER METHODS
 def get_tool_str_representation(tool):
     schema = get_function_schema(tool)
     return {"type": "function", "function": schema}
@@ -116,6 +120,9 @@ def wrap_llm(str):
 
 def wrap_error(str):
     return f"[red bold]{str}[/red bold]"
+
+
+# END - HELPER METHODS
 
 
 def main():
