@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 
 from dotenv import load_dotenv
 from function_schema import get_function_schema
-from openrouter import OpenRouter
+from openai import OpenAI
 
 # This is just for coloring the terminal
 from rich import print
@@ -14,9 +14,9 @@ from rich import print
 load_dotenv()
 
 # This just sets up the LLM API we're going to use
-openrouter_api = OpenRouter(
+client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY", ""),
-    server_url=os.getenv("OPENROUTER_BASE_URL", None),
+    base_url=os.getenv("OPENROUTER_BASE_URL", None),
 )
 
 model = os.getenv("OPENROUTER_MODEL")
@@ -24,7 +24,23 @@ model = os.getenv("OPENROUTER_MODEL")
 
 # TODO: Tell the assistant about the tools it has
 SYSTEM_PROMPT = """
-You are a coding assistant whose goal it is to help us solve coding tasks.
+### ROLE
+You are an autonomous AI Coding Agent. Your goal is to solve programming tasks with high precision and minimal technical debt.
+
+### WORKFLOW
+1. ANALYZE: Read the provided files and understand the requirement.
+2. PLAN: List the files you will create or modify.
+3. IMPLEMENT: Use the provided tools to write the code.
+4. REVIEW: Check for syntax errors or logical flaws.
+
+### RULES
+- Stay concise. No conversational filler.
+- If a tool returns an error, stop and diagnose before proceeding.
+- Ensure all new files end with a single newline.
+- Use absolute imports wherever possible.
+
+### OUTPUT FORMAT
+Always provide a brief summary of what you did after completing a task.
 """
 
 # BEGIN - TOOL Defs
@@ -138,7 +154,7 @@ def main():
         # Now, the problem is, if the llm wants to call multiple tools... what do we do?
         # Simple, we loop until the llm doesn't want to call more tools
         while True:
-            response = openrouter_api.chat.send(
+            response = client.chat.completions.create(
                 messages=conversation, model=model, tools=get_tools()
             )
             # Let's extract tool calls
