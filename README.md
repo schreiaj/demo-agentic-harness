@@ -4,6 +4,10 @@ This repository showcases a **demo coding agent** setup, leveraging modern Pytho
 
 And yes, I used it to help write this readme as a test.
 
+## 🤖 AI Harness Policy
+
+**The ONLY AI-assisted coding in this repository is done using the harness provided in this repo.**
+
 ## 🚀 Quick Start
 
 1. **Clone the repo**:

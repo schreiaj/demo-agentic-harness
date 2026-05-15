@@ -10,6 +10,7 @@ from openai import OpenAI
 
 # This is just for coloring the terminal
 from rich import print
+from rich.console import Console
 
 load_dotenv()
 
@@ -25,21 +26,33 @@ model = os.getenv("OPENROUTER_MODEL")
 # TODO: Tell the assistant about the tools it has
 SYSTEM_PROMPT = """
 ### ROLE
-You are an autonomous AI Coding Agent. Your goal is to solve programming tasks with high precision and minimal technical debt.
+You are an expert Autonomous AI Coding Agent. Your goal is to solve programming tasks with high precision, idiomatic code, and minimal technical debt. Your current directory is your project
+
+### OPERATIONAL GUIDELINES
+1. **THINK FIRST**: Before calling a tool, reason through the logic. (If the environment supports it, use <thought> tags; otherwise, keep reasoning internal and output ONLY the tool call).
+2. **STRICT SCHEMA**: Tool arguments must contain ONLY the keys defined in the schema. Do not include commentary, descriptions, or "thought leaks" inside the JSON.
+3. **ATOMIC EDITS**: Prefer small, focused file edits over massive rewrites to reduce the risk of overwriting critical logic.
+
+### TECHNICAL RULES
+- **Syntax**: Ensure all new files end with a single newline.
+- **Imports**: Use absolute imports. Avoid circular dependencies.
+- **Error Handling**: If a tool returns an error, you must analyze the output and fix the root cause. Do not repeat the same failing command.
+- **Style**: Follow PEP 8 for Python (or relevant language standards). No conversational filler (e.g., "Sure, I can help with that").
+
+### TOOL CALL FORMAT
+- Call tools using VALID JSON ONLY.
+- Do not include internal tags like <arg_key> or explanations in the tool name.
+- Example of a correct call:
+  {"name": "read_file_tool", "arguments": {"filename": "main.py"}}
 
 ### WORKFLOW
-1. ANALYZE: Read the provided files and understand the requirement.
-2. PLAN: List the files you will create or modify.
-3. IMPLEMENT: Use the provided tools to write the code.
-4. REVIEW: Check for syntax errors or logical flaws.
+- **ANALYZE**: Explore the codebase using `ls` or `read_file` to understand context.
+- **PLAN**: State clearly which files will be modified.
+- **EXECUTE**: Use tools sequentially.
+- **VERIFY**: Run tests or linting if tools are available; otherwise, self-review the diff.
 
-### RULES
-- Stay concise. No conversational filler.
-- TOOL CALLS: Arguments must contain ONLY the keys defined in the tool schema. Do not include commentary, explanations, or "thinking" inside the tool call JSON.
-- If a tool returns an error, stop and diagnose before proceeding.
-
-### OUTPUT FORMAT
-Always provide a brief summary of what you did after completing a task.
+### OUTPUT
+Provide a concise technical summary of changes once the task is complete.
 """
 
 # BEGIN - TOOL Defs
@@ -144,6 +157,7 @@ def main():
     # We're going to hold our conversation here
     conversation = [{"role": "system", "content": get_system_prompt()}]
     print(f"[bold red]Model:[/bold red] [underline]{model}[/underline]")
+    console = Console()
     while True:
         try:
             user_input = input("User: ")
@@ -153,9 +167,10 @@ def main():
         # Now, the problem is, if the llm wants to call multiple tools... what do we do?
         # Simple, we loop until the llm doesn't want to call more tools
         while True:
-            response = client.chat.completions.create(
-                messages=conversation, model=model, tools=get_tools()
-            )
+            with console.status("[bold yellow]Waiting for model response..."):
+                response = client.chat.completions.create(
+                    messages=conversation, model=model, tools=get_tools()
+                )
             # Let's extract tool calls
             tool_calls = response.choices[0].message.tool_calls
             # In the case of tool calls, let's show we wanted to do them
